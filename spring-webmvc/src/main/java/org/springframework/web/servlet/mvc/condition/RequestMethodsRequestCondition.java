@@ -22,9 +22,11 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import javax.servlet.DispatcherType;
 import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.cors.CorsUtils;
 
@@ -38,8 +40,8 @@ import org.springframework.web.cors.CorsUtils;
  */
 public final class RequestMethodsRequestCondition extends AbstractRequestCondition<RequestMethodsRequestCondition> {
 
-	private static final RequestMethodsRequestCondition HEAD_CONDITION =
-			new RequestMethodsRequestCondition(RequestMethod.HEAD);
+	private static final RequestMethodsRequestCondition GET_CONDITION =
+			new RequestMethodsRequestCondition(RequestMethod.GET);
 
 
 	private final Set<RequestMethod> methods;
@@ -55,12 +57,12 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	}
 
 	private RequestMethodsRequestCondition(Collection<RequestMethod> requestMethods) {
-		this.methods = Collections.unmodifiableSet(new LinkedHashSet<RequestMethod>(requestMethods));
+		this.methods = Collections.unmodifiableSet(new LinkedHashSet<>(requestMethods));
 	}
 
 
 	private static List<RequestMethod> asList(RequestMethod... requestMethods) {
-		return (requestMethods != null ? Arrays.asList(requestMethods) : Collections.<RequestMethod>emptyList());
+		return (requestMethods != null ? Arrays.asList(requestMethods) : Collections.emptyList());
 	}
 
 
@@ -87,7 +89,7 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	 */
 	@Override
 	public RequestMethodsRequestCondition combine(RequestMethodsRequestCondition other) {
-		Set<RequestMethod> set = new LinkedHashSet<RequestMethod>(this.methods);
+		Set<RequestMethod> set = new LinkedHashSet<>(this.methods);
 		set.addAll(other.methods);
 		return new RequestMethodsRequestCondition(set);
 	}
@@ -103,13 +105,14 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	 */
 	@Override
 	public RequestMethodsRequestCondition getMatchingCondition(HttpServletRequest request) {
-
 		if (CorsUtils.isPreFlightRequest(request)) {
 			return matchPreFlight(request);
 		}
 
 		if (getMethods().isEmpty()) {
-			if (RequestMethod.OPTIONS.name().equals(request.getMethod())) {
+			if (RequestMethod.OPTIONS.name().equals(request.getMethod()) &&
+					!DispatcherType.ERROR.equals(request.getDispatcherType())) {
+
 				return null; // No implicit match for OPTIONS (we handle it)
 			}
 			return this;
@@ -131,28 +134,19 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 		return matchRequestMethod(expectedMethod);
 	}
 
-	private RequestMethodsRequestCondition matchRequestMethod(String httpMethod) {
-		RequestMethod requestMethod = getRequestMethod(httpMethod);
-		if (requestMethod != null) {
+	private RequestMethodsRequestCondition matchRequestMethod(String httpMethodValue) {
+		HttpMethod httpMethod = HttpMethod.resolve(httpMethodValue);
+		if (httpMethod != null) {
 			for (RequestMethod method : getMethods()) {
-				if (method.equals(requestMethod)) {
+				if (httpMethod.matches(method.name())) {
 					return new RequestMethodsRequestCondition(method);
 				}
 			}
-			if (RequestMethod.HEAD.equals(requestMethod) && getMethods().contains(RequestMethod.GET)) {
-				return HEAD_CONDITION;
+			if (httpMethod == HttpMethod.HEAD && getMethods().contains(RequestMethod.GET)) {
+				return GET_CONDITION;
 			}
 		}
 		return null;
-	}
-
-	private RequestMethod getRequestMethod(String httpMethod) {
-		try {
-			return RequestMethod.valueOf(httpMethod);
-		}
-		catch (IllegalArgumentException ex) {
-			return null;
-		}
 	}
 
 	/**
@@ -168,7 +162,18 @@ public final class RequestMethodsRequestCondition extends AbstractRequestConditi
 	 */
 	@Override
 	public int compareTo(RequestMethodsRequestCondition other, HttpServletRequest request) {
-		return (other.methods.size() - this.methods.size());
+		if (other.methods.size() != this.methods.size()) {
+			return other.methods.size() - this.methods.size();
+		}
+		else if (this.methods.size() == 1) {
+			if (this.methods.contains(RequestMethod.HEAD) && other.methods.contains(RequestMethod.GET)) {
+				return -1;
+			}
+			else if (this.methods.contains(RequestMethod.GET) && other.methods.contains(RequestMethod.HEAD)) {
+				return 1;
+			}
+		}
+		return 0;
 	}
 
 }

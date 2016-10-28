@@ -45,7 +45,7 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  * constructor (and then added to the model). Once created the attribute is
  * populated via data binding to Servlet request parameters. Validation may be
  * applied if the argument is annotated with {@code @javax.validation.Valid}.
- * or {@link @Validated}.
+ * or Spring's own {@code @org.springframework.validation.annotation.Validated}.
  *
  * <p>When this handler is created with {@code annotationNotRequired=true}
  * any non-simple type argument and return value is regarded as a model
@@ -102,8 +102,8 @@ public class ModelAttributeMethodProcessor
 				createAttribute(name, parameter, binderFactory, webRequest));
 
 		if (!mavContainer.isBindingDisabled(name)) {
-			ModelAttribute annotation = parameter.getParameterAnnotation(ModelAttribute.class);
-			if (annotation != null && !annotation.binding()) {
+			ModelAttribute ann = parameter.getParameterAnnotation(ModelAttribute.class);
+			if (ann != null && !ann.binding()) {
 				mavContainer.setBindingDisabled(name);
 			}
 		}
@@ -192,8 +192,8 @@ public class ModelAttributeMethodProcessor
 	 */
 	@Override
 	public boolean supportsReturnType(MethodParameter returnType) {
-		return (returnType.getMethodAnnotation(ModelAttribute.class) != null ||
-				this.annotationNotRequired && !BeanUtils.isSimpleProperty(returnType.getParameterType()));
+		return (returnType.hasMethodAnnotation(ModelAttribute.class) ||
+				(this.annotationNotRequired && !BeanUtils.isSimpleProperty(returnType.getParameterType())));
 	}
 
 	/**

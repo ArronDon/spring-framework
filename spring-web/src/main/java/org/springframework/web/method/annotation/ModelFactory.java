@@ -48,9 +48,8 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  * Assist with initialization of the {@link Model} before controller method
  * invocation and with updates to it after the invocation.
  *
- * <p>On initialization the model is populated with attributes temporarily
- * stored in the session and through the invocation of {@code @ModelAttribute}
- * methods.
+ * <p>On initialization the model is populated with attributes temporarily stored
+ * in the session and through the invocation of {@code @ModelAttribute} methods.
  *
  * <p>On update model attributes are synchronized with the session and also
  * {@link BindingResult} attributes are added if missing.
@@ -62,8 +61,7 @@ public final class ModelFactory {
 
 	private static final Log logger = LogFactory.getLog(ModelFactory.class);
 
-
-	private final List<ModelMethod> modelMethods = new ArrayList<ModelMethod>();
+	private final List<ModelMethod> modelMethods = new ArrayList<>();
 
 	private final WebDataBinderFactory dataBinderFactory;
 
@@ -92,11 +90,11 @@ public final class ModelFactory {
 	/**
 	 * Populate the model in the following order:
 	 * <ol>
-	 * 	<li>Retrieve "known" session attributes listed as {@code @SessionAttributes}.
-	 * 	<li>Invoke {@code @ModelAttribute} methods
-	 * 	<li>Find {@code @ModelAttribute} method arguments also listed as
-	 * 	{@code @SessionAttributes} and ensure they're present in the model raising
-	 * 	an exception if necessary.
+	 * <li>Retrieve "known" session attributes listed as {@code @SessionAttributes}.
+	 * <li>Invoke {@code @ModelAttribute} methods
+	 * <li>Find {@code @ModelAttribute} method arguments also listed as
+	 * {@code @SessionAttributes} and ensure they're present in the model raising
+	 * an exception if necessary.
 	 * </ol>
 	 * @param request the current request
 	 * @param container a container with the model to be initialized
@@ -108,15 +106,13 @@ public final class ModelFactory {
 
 		Map<String, ?> sessionAttributes = this.sessionAttributesHandler.retrieveAttributes(request);
 		container.mergeAttributes(sessionAttributes);
-
 		invokeModelAttributeMethods(request, container);
 
 		for (String name : findSessionAttributeArguments(handlerMethod)) {
 			if (!container.containsAttribute(name)) {
 				Object value = this.sessionAttributesHandler.retrieveAttribute(request, name);
 				if (value == null) {
-					throw new HttpSessionRequiredException(
-							"Expected session attribute '" + name + "'");
+					throw new HttpSessionRequiredException("Expected session attribute '" + name + "'", name);
 				}
 				container.addAttribute(name, value);
 			}
@@ -127,24 +123,23 @@ public final class ModelFactory {
 	 * Invoke model attribute methods to populate the model.
 	 * Attributes are added only if not already present in the model.
 	 */
-	private void invokeModelAttributeMethods(NativeWebRequest request,
-			ModelAndViewContainer container) throws Exception {
+	private void invokeModelAttributeMethods(NativeWebRequest request, ModelAndViewContainer container)
+			throws Exception {
 
 		while (!this.modelMethods.isEmpty()) {
 			InvocableHandlerMethod modelMethod = getNextModelMethod(container).getHandlerMethod();
-			ModelAttribute annotation = modelMethod.getMethodAnnotation(ModelAttribute.class);
-			if (container.containsAttribute(annotation.name())) {
-				if (!annotation.binding()) {
-					container.setBindingDisabled(annotation.name());
+			ModelAttribute ann = modelMethod.getMethodAnnotation(ModelAttribute.class);
+			if (container.containsAttribute(ann.name())) {
+				if (!ann.binding()) {
+					container.setBindingDisabled(ann.name());
 				}
 				continue;
 			}
 
 			Object returnValue = modelMethod.invokeForRequest(request, container);
-
 			if (!modelMethod.isVoid()){
 				String returnValueName = getNameForReturnValue(returnValue, modelMethod.getReturnType());
-				if (!annotation.binding()) {
+				if (!ann.binding()) {
 					container.setBindingDisabled(returnValueName);
 				}
 				if (!container.containsAttribute(returnValueName)) {
@@ -177,7 +172,7 @@ public final class ModelFactory {
 	 * Find {@code @ModelAttribute} arguments also listed as {@code @SessionAttributes}.
 	 */
 	private List<String> findSessionAttributeArguments(HandlerMethod handlerMethod) {
-		List<String> result = new ArrayList<String>();
+		List<String> result = new ArrayList<>();
 		for (MethodParameter parameter : handlerMethod.getMethodParameters()) {
 			if (parameter.hasParameterAnnotation(ModelAttribute.class)) {
 				String name = getNameForParameter(parameter);
@@ -193,32 +188,32 @@ public final class ModelFactory {
 	/**
 	 * Derives the model attribute name for a method parameter based on:
 	 * <ol>
-	 * 	<li>The parameter {@code @ModelAttribute} annotation value
-	 * 	<li>The parameter type
+	 * <li>The parameter {@code @ModelAttribute} annotation value
+	 * <li>The parameter type
 	 * </ol>
 	 * @return the derived name; never {@code null} or an empty string
 	 */
 	public static String getNameForParameter(MethodParameter parameter) {
-		ModelAttribute annot = parameter.getParameterAnnotation(ModelAttribute.class);
-		String name = (annot != null) ? annot.value() : null;
+		ModelAttribute ann = parameter.getParameterAnnotation(ModelAttribute.class);
+		String name = (ann != null ? ann.value() : null);
 		return StringUtils.hasText(name) ? name : Conventions.getVariableNameForParameter(parameter);
 	}
 
 	/**
 	 * Derive the model attribute name for the given return value using one of:
 	 * <ol>
-	 * 	<li>The method {@code ModelAttribute} annotation value
-	 * 	<li>The declared return type if it is more specific than {@code Object}
-	 * 	<li>The actual return value type
+	 * <li>The method {@code ModelAttribute} annotation value
+	 * <li>The declared return type if it is more specific than {@code Object}
+	 * <li>The actual return value type
 	 * </ol>
 	 * @param returnValue the value returned from a method invocation
 	 * @param returnType the return type of the method
 	 * @return the model name, never {@code null} nor empty
 	 */
 	public static String getNameForReturnValue(Object returnValue, MethodParameter returnType) {
-		ModelAttribute annotation = returnType.getMethodAnnotation(ModelAttribute.class);
-		if (annotation != null && StringUtils.hasText(annotation.value())) {
-			return annotation.value();
+		ModelAttribute ann = returnType.getMethodAnnotation(ModelAttribute.class);
+		if (ann != null && StringUtils.hasText(ann.value())) {
+			return ann.value();
 		}
 		else {
 			Method method = returnType.getMethod();
@@ -252,7 +247,7 @@ public final class ModelFactory {
 	 * Add {@link BindingResult} attributes to the model for attributes that require it.
 	 */
 	private void updateBindingResult(NativeWebRequest request, ModelMap model) throws Exception {
-		List<String> keyNames = new ArrayList<String>(model.keySet());
+		List<String> keyNames = new ArrayList<>(model.keySet());
 		for (String name : keyNames) {
 			Object value = model.get(name);
 
@@ -289,8 +284,7 @@ public final class ModelFactory {
 
 		private final InvocableHandlerMethod handlerMethod;
 
-		private final Set<String> dependencies = new HashSet<String>();
-
+		private final Set<String> dependencies = new HashSet<>();
 
 		private ModelMethod(InvocableHandlerMethod handlerMethod) {
 			this.handlerMethod = handlerMethod;
@@ -315,7 +309,7 @@ public final class ModelFactory {
 		}
 
 		public List<String> getUnresolvedDependencies(ModelAndViewContainer mavContainer) {
-			List<String> result = new ArrayList<String>(this.dependencies.size());
+			List<String> result = new ArrayList<>(this.dependencies.size());
 			for (String name : this.dependencies) {
 				if (!mavContainer.containsAttribute(name)) {
 					result.add(name);

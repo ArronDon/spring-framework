@@ -41,7 +41,7 @@ import java.lang.annotation.Target;
  * <p>Each attribute is mutually exclusive, so only set one attribute per annotation instance
  * (the one most convenient one for your formatting needs).
  * When the pattern attribute is specified, it takes precedence over both the style and ISO attribute.
- * When the {@link #iso} attribute is specified, if takes precedence over the style attribute.
+ * When the {@link #iso} attribute is specified, it takes precedence over the style attribute.
  * When no annotation attributes are specified, the default format applied is style-based
  * with a style code of 'SS' (short date, short time).
  *
@@ -104,7 +104,7 @@ public @interface DateTimeFormat {
 
 		/**
 		 * The most common ISO DateTime Format {@code yyyy-MM-dd'T'HH:mm:ss.SSSZ},
-		 * e.g. "2000-10-31 01:30:00.000-05:00".
+		 * e.g. "2000-10-31T01:30:00.000-05:00".
 		 * <p>This is the default if no annotation value is specified.
 		 */
 		DATE_TIME,

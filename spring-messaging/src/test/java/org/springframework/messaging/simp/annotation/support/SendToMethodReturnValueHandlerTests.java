@@ -16,8 +16,9 @@
 
 package org.springframework.messaging.simp.annotation.support;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.LinkedHashMap;
@@ -34,13 +35,16 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.springframework.core.MethodParameter;
+import org.springframework.core.annotation.AliasFor;
 import org.springframework.core.annotation.SynthesizingMethodParameter;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.converter.StringMessageConverter;
+import org.springframework.messaging.handler.DestinationPatternsMessageCondition;
 import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.handler.annotation.support.DestinationVariableMethodArgumentResolver;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -52,9 +56,6 @@ import org.springframework.util.MimeType;
 
 import static org.junit.Assert.*;
 import static org.mockito.BDDMockito.*;
-import static org.springframework.messaging.handler.DestinationPatternsMessageCondition.LOOKUP_DESTINATION_HEADER;
-import static org.springframework.messaging.handler.annotation.support.DestinationVariableMethodArgumentResolver.*;
-import static org.springframework.messaging.support.MessageHeaderAccessor.*;
 
 /**
  * Test fixture for {@link SendToMethodReturnValueHandlerTests}.
@@ -65,7 +66,7 @@ import static org.springframework.messaging.support.MessageHeaderAccessor.*;
  */
 public class SendToMethodReturnValueHandlerTests {
 
-	private static final MimeType MIME_TYPE = new MimeType("text", "plain", Charset.forName("UTF-8"));
+	private static final MimeType MIME_TYPE = new MimeType("text", "plain", StandardCharsets.UTF_8);
 
 	private static final String PAYLOAD = "payload";
 
@@ -110,31 +111,31 @@ public class SendToMethodReturnValueHandlerTests {
 		jsonMessagingTemplate.setMessageConverter(new MappingJackson2MessageConverter());
 		this.jsonHandler = new SendToMethodReturnValueHandler(jsonMessagingTemplate, true);
 
-		Method method = this.getClass().getDeclaredMethod("handleNoAnnotations");
+		Method method = getClass().getDeclaredMethod("handleNoAnnotations");
 		this.noAnnotationsReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToDefaultDestination");
+		method = getClass().getDeclaredMethod("handleAndSendToDefaultDestination");
 		this.sendToDefaultDestReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendTo");
+		method = getClass().getDeclaredMethod("handleAndSendTo");
 		this.sendToReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToWithPlaceholders");
+		method = getClass().getDeclaredMethod("handleAndSendToWithPlaceholders");
 		this.sendToWithPlaceholdersReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToUser");
+		method = getClass().getDeclaredMethod("handleAndSendToUser");
 		this.sendToUserReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToUserSingleSession");
+		method = getClass().getDeclaredMethod("handleAndSendToUserSingleSession");
 		this.sendToUserSingleSessionReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToUserDefaultDestination");
+		method = getClass().getDeclaredMethod("handleAndSendToUserDefaultDestination");
 		this.sendToUserDefaultDestReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToUserDefaultDestinationSingleSession");
+		method = getClass().getDeclaredMethod("handleAndSendToUserDefaultDestinationSingleSession");
 		this.sendToUserSingleSessionDefaultDestReturnType = new SynthesizingMethodParameter(method, -1);
 
-		method = this.getClass().getDeclaredMethod("handleAndSendToJsonView");
+		method = getClass().getDeclaredMethod("handleAndSendToJsonView");
 		this.jsonViewReturnType = new SynthesizingMethodParameter(method, -1);
 
 		method = SendToTestBean.class.getDeclaredMethod("handleNoAnnotation");
@@ -284,9 +285,43 @@ public class SendToMethodReturnValueHandlerTests {
 		assertResponse(this.userDefaultOverrideAnnotation, sessionId, 1, "/user/sess1/dest4");
 	}
 
+	@Test // SPR-14238
+	public void sendToUserWithSendToDefaultOverride() throws Exception {
+		given(this.messageChannel.send(any(Message.class))).willReturn(true);
+
+		Class<?> clazz = SendToUserWithSendToOverrideTestBean.class;
+		Method method = clazz.getDeclaredMethod("handleAndSendToDefaultDestination");
+		MethodParameter parameter = new SynthesizingMethodParameter(method, -1);
+
+		String sessionId = "sess1";
+		Message<?> inputMessage = createMessage(sessionId, "sub1", null, null, null);
+		this.handler.handleReturnValue(PAYLOAD, parameter, inputMessage);
+
+		verify(this.messageChannel, times(1)).send(this.messageCaptor.capture());
+		assertResponse(parameter, sessionId, 0, "/user/sess1/dest-default");
+	}
+
+	@Test // SPR-14238
+	public void sendToUserWithSendToOverride() throws Exception {
+		given(this.messageChannel.send(any(Message.class))).willReturn(true);
+
+		Class<?> clazz = SendToUserWithSendToOverrideTestBean.class;
+		Method method = clazz.getDeclaredMethod("handleAndSendToOverride");
+		MethodParameter parameter = new SynthesizingMethodParameter(method, -1);
+
+		String sessionId = "sess1";
+		Message<?> inputMessage = createMessage(sessionId, "sub1", null, null, null);
+		this.handler.handleReturnValue(PAYLOAD, parameter, inputMessage);
+
+		verify(this.messageChannel, times(2)).send(this.messageCaptor.capture());
+		assertResponse(parameter, sessionId, 0, "/dest3");
+		assertResponse(parameter, sessionId, 1, "/dest4");
+	}
+
 
 	private void assertResponse(MethodParameter methodParameter, String sessionId,
 			int index, String destination) {
+
 		SimpMessageHeaderAccessor accessor = getCapturedAccessor(index);
 		assertEquals(sessionId, accessor.getSessionId());
 		assertEquals(destination, accessor.getDestination());
@@ -321,7 +356,8 @@ public class SendToMethodReturnValueHandlerTests {
 		verify(messagingTemplate).convertAndSend(eq("/topic/dest"), eq(PAYLOAD), captor.capture());
 
 		MessageHeaders headers = captor.getValue();
-		SimpMessageHeaderAccessor accessor = getAccessor(headers, SimpMessageHeaderAccessor.class);
+		SimpMessageHeaderAccessor accessor =
+				MessageHeaderAccessor.getAccessor(headers, SimpMessageHeaderAccessor.class);
 		assertNotNull(accessor);
 		assertTrue(accessor.isMutable());
 		assertEquals("sess1", accessor.getSessionId());
@@ -363,7 +399,7 @@ public class SendToMethodReturnValueHandlerTests {
 		SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create();
 		accessor.setSessionId(sessionId);
 		accessor.setSubscriptionId("sub1");
-		accessor.setHeader(DESTINATION_TEMPLATE_VARIABLES_HEADER, vars);
+		accessor.setHeader(DestinationVariableMethodArgumentResolver.DESTINATION_TEMPLATE_VARIABLES_HEADER, vars);
 		Message<?> message = MessageBuilder.createMessage(PAYLOAD, accessor.getMessageHeaders());
 		this.handler.handleReturnValue(PAYLOAD, this.sendToWithPlaceholdersReturnType, message);
 
@@ -513,7 +549,7 @@ public class SendToMethodReturnValueHandlerTests {
 		headerAccessor.setSubscriptionId(subsId);
 		if (dest != null && destPrefix != null) {
 			headerAccessor.setDestination(destPrefix + dest);
-			headerAccessor.setHeader(LOOKUP_DESTINATION_HEADER, dest);
+			headerAccessor.setHeader(DestinationPatternsMessageCondition.LOOKUP_DESTINATION_HEADER, dest);
 		}
 		if (user != null) {
 			headerAccessor.setUser(user);
@@ -524,6 +560,64 @@ public class SendToMethodReturnValueHandlerTests {
 	private SimpMessageHeaderAccessor getCapturedAccessor(int index) {
 		Message<?> message = this.messageCaptor.getAllValues().get(index);
 		return MessageHeaderAccessor.getAccessor(message, SimpMessageHeaderAccessor.class);
+	}
+
+
+	@SuppressWarnings("unused")
+	String handleNoAnnotations() {
+		return PAYLOAD;
+	}
+
+	@SendTo
+	@SuppressWarnings("unused")
+	String handleAndSendToDefaultDestination() {
+		return PAYLOAD;
+	}
+
+	@SendTo({"/dest1", "/dest2"})
+	@SuppressWarnings("unused")
+	String handleAndSendTo() {
+		return PAYLOAD;
+	}
+
+	@SendTo("/topic/chat.message.filtered.{roomName}")
+	@SuppressWarnings("unused")
+	String handleAndSendToWithPlaceholders() {
+		return PAYLOAD;
+	}
+
+	@SendToUser
+	@SuppressWarnings("unused")
+	String handleAndSendToUserDefaultDestination() {
+		return PAYLOAD;
+	}
+
+	@SendToUser(broadcast = false)
+	@SuppressWarnings("unused")
+	String handleAndSendToUserDefaultDestinationSingleSession() {
+		return PAYLOAD;
+	}
+
+	@SendToUser({"/dest1", "/dest2"})
+	@SuppressWarnings("unused")
+	String handleAndSendToUser() {
+		return PAYLOAD;
+	}
+
+	@SendToUser(destinations = { "/dest1", "/dest2" }, broadcast = false)
+	@SuppressWarnings("unused")
+	String handleAndSendToUserSingleSession() {
+		return PAYLOAD;
+	}
+
+	@JsonView(MyJacksonView1.class)
+	@SuppressWarnings("unused")
+	JacksonViewBean handleAndSendToJsonView() {
+		JacksonViewBean payload = new JacksonViewBean();
+		payload.setWithView1("with");
+		payload.setWithView2("with");
+		payload.setWithoutView("without");
+		return payload;
 	}
 
 
@@ -538,6 +632,7 @@ public class SendToMethodReturnValueHandlerTests {
 		}
 	}
 
+
 	private static class UniqueUser extends TestUser implements DestinationUserNameProvider {
 
 		@Override
@@ -546,97 +641,82 @@ public class SendToMethodReturnValueHandlerTests {
 		}
 	}
 
-	@SuppressWarnings("unused")
-	public String handleNoAnnotations() {
-		return PAYLOAD;
+
+	@SendTo
+	@Retention(RetentionPolicy.RUNTIME)
+	@interface MySendTo {
+
+		@AliasFor(annotation = SendTo.class, attribute = "value")
+		String[] dest();
 	}
 
-	@SendTo @SuppressWarnings("unused")
-	public String handleAndSendToDefaultDestination() {
-		return PAYLOAD;
+
+	@SendToUser
+	@Retention(RetentionPolicy.RUNTIME)
+	@interface MySendToUser {
+
+		@AliasFor(annotation = SendToUser.class, attribute = "destinations")
+		String[] dest();
 	}
 
-	@SendTo({"/dest1", "/dest2"}) @SuppressWarnings("unused")
-	public String handleAndSendTo() {
-		return PAYLOAD;
-	}
 
-	@SendTo("/topic/chat.message.filtered.{roomName}") @SuppressWarnings("unused")
-	public String handleAndSendToWithPlaceholders() {
-		return PAYLOAD;
-	}
-
-	@SendToUser @SuppressWarnings("unused")
-	public String handleAndSendToUserDefaultDestination() {
-		return PAYLOAD;
-	}
-
-	@SendToUser(broadcast = false) @SuppressWarnings("unused")
-	public String handleAndSendToUserDefaultDestinationSingleSession() {
-		return PAYLOAD;
-	}
-
-	@SendToUser({"/dest1", "/dest2"}) @SuppressWarnings("unused")
-	public String handleAndSendToUser() {
-		return PAYLOAD;
-	}
-
-	@SendToUser(destinations = { "/dest1", "/dest2" }, broadcast = false) @SuppressWarnings("unused")
-	public String handleAndSendToUserSingleSession() {
-		return PAYLOAD;
-	}
-
-	@SendTo("/dest")
-	@JsonView(MyJacksonView1.class) @SuppressWarnings("unused")
-	public JacksonViewBean handleAndSendToJsonView() {
-		JacksonViewBean payload = new JacksonViewBean();
-		payload.setWithView1("with");
-		payload.setWithView2("with");
-		payload.setWithoutView("without");
-		return payload;
-	}
-
-	@SendTo("/dest-default") @SuppressWarnings("unused")
+	@MySendTo(dest = "/dest-default") @SuppressWarnings("unused")
 	private static class SendToTestBean {
 
-		public String handleNoAnnotation() {
+		String handleNoAnnotation() {
 			return PAYLOAD;
 		}
 
 		@SendTo
-		public String handleAndSendToDefaultDestination() {
+		String handleAndSendToDefaultDestination() {
 			return PAYLOAD;
 		}
 
-		@SendTo({"/dest3", "/dest4"})
-		public String handleAndSendToOverride() {
+		@MySendTo(dest = {"/dest3", "/dest4"})
+		String handleAndSendToOverride() {
 			return PAYLOAD;
 		}
-
 	}
 
-	@SendToUser("/dest-default") @SuppressWarnings("unused")
+
+	@MySendToUser(dest = "/dest-default") @SuppressWarnings("unused")
 	private static class SendToUserTestBean {
 
-		public String handleNoAnnotation() {
+		String handleNoAnnotation() {
 			return PAYLOAD;
 		}
 
 		@SendToUser
-		public String handleAndSendToDefaultDestination() {
+		String handleAndSendToDefaultDestination() {
 			return PAYLOAD;
 		}
 
-		@SendToUser({"/dest3", "/dest4"})
-		public String handleAndSendToOverride() {
+		@MySendToUser(dest = {"/dest3", "/dest4"})
+		String handleAndSendToOverride() {
+			return PAYLOAD;
+		}
+	}
+
+
+	@MySendToUser(dest = "/dest-default") @SuppressWarnings("unused")
+	private static class SendToUserWithSendToOverrideTestBean {
+
+		@SendTo
+		String handleAndSendToDefaultDestination() {
 			return PAYLOAD;
 		}
 
+		@MySendTo(dest = {"/dest3", "/dest4"})
+		String handleAndSendToOverride() {
+			return PAYLOAD;
+		}
 	}
 
 
 	private interface MyJacksonView1 {}
+
 	private interface MyJacksonView2 {}
+
 
 	@SuppressWarnings("unused")
 	private static class JacksonViewBean {
@@ -653,23 +733,23 @@ public class SendToMethodReturnValueHandlerTests {
 			return withView1;
 		}
 
-		public void setWithView1(String withView1) {
+		void setWithView1(String withView1) {
 			this.withView1 = withView1;
 		}
 
-		public String getWithView2() {
+		String getWithView2() {
 			return withView2;
 		}
 
-		public void setWithView2(String withView2) {
+		void setWithView2(String withView2) {
 			this.withView2 = withView2;
 		}
 
-		public String getWithoutView() {
+		String getWithoutView() {
 			return withoutView;
 		}
 
-		public void setWithoutView(String withoutView) {
+		void setWithoutView(String withoutView) {
 			this.withoutView = withoutView;
 		}
 	}

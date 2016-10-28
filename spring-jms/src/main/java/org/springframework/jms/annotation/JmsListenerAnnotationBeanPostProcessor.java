@@ -39,7 +39,7 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.beans.factory.config.EmbeddedValueResolver;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.Ordered;
-import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.jms.config.JmsListenerConfigUtils;
 import org.springframework.jms.config.JmsListenerContainerFactory;
 import org.springframework.jms.config.JmsListenerEndpointRegistrar;
@@ -99,14 +99,14 @@ public class JmsListenerAnnotationBeanPostProcessor
 
 	private StringValueResolver embeddedValueResolver;
 
-	private final MessageHandlerMethodFactoryAdapter messageHandlerMethodFactory = new MessageHandlerMethodFactoryAdapter();
+	private final MessageHandlerMethodFactoryAdapter messageHandlerMethodFactory =
+			new MessageHandlerMethodFactoryAdapter();
 
 	private final JmsListenerEndpointRegistrar registrar = new JmsListenerEndpointRegistrar();
 
 	private final AtomicInteger counter = new AtomicInteger();
 
-	private final Set<Class<?>> nonAnnotatedClasses =
-			Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>(64));
+	private final Set<Class<?>> nonAnnotatedClasses = Collections.newSetFromMap(new ConcurrentHashMap<>(64));
 
 
 	@Override
@@ -205,8 +205,8 @@ public class JmsListenerAnnotationBeanPostProcessor
 					new MethodIntrospector.MetadataLookup<Set<JmsListener>>() {
 						@Override
 						public Set<JmsListener> inspect(Method method) {
-							Set<JmsListener> listenerMethods =
-									AnnotationUtils.getRepeatableAnnotations(method, JmsListener.class, JmsListeners.class);
+							Set<JmsListener> listenerMethods = AnnotatedElementUtils.getMergedRepeatableAnnotations(
+									method, JmsListener.class, JmsListeners.class);
 							return (!listenerMethods.isEmpty() ? listenerMethods : null);
 						}
 					});
